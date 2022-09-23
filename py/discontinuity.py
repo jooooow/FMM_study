@@ -4,6 +4,7 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import comb
+from itertools import product
 
 def distance(a,b):
     return math.sqrt(sum([(x-y) ** 2 for x,y in zip(a,b)]))
@@ -28,6 +29,16 @@ class Particle:
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y
 
+def get_dict_plain(ps):
+    pdict = {}
+    for i,p in enumerate(ps):
+        grid_idx = p.get_grid_idx()
+        if grid_idx in pdict:
+            pdict[grid_idx].append((i,1.0))
+        else:
+            pdict[grid_idx] = [(i,1.0)]
+    return pdict
+
 P = 2
 ps = [Particle(0.76,0.249,10), Particle(0.1,0.65,-10)]
 phi_real = []
@@ -43,65 +54,45 @@ for _ in r:
                 s += -p_s.q * cmath.log(z - zi)
         p_t.phi_real = s.real
 
-    pdict = {}
-    for i,p in enumerate(ps):
-        grid_idx = p.get_grid_idx()
-        if grid_idx in pdict:
-            pdict[grid_idx].append(i)
-        else:
-            pdict[grid_idx] = [i]
+    pdict = get_dict_plain(ps)
 
     M = np.zeros([P+1,4,4], dtype=np.complex)
     Q = np.zeros([4,4])
     L = np.zeros([P+1,4,4], dtype=np.complex)
 
-    for gidx_y in range(4):
-        for gidx_x in range(4):
-            gidx = (gidx_y, gidx_x)
-            if gidx in pdict:
-                for pidx in pdict[gidx]:
-                    p = ps[pidx]
-                    Q[gidx] += p.q
-                    for k in range(1,1+P+1):
-                        zi = complex(p.x, p.y)
-                        zd = grid_center(gidx_x, gidx_y)
-                        M[(k-1, gidx_y, gidx_x)] += -p.q * ((zi - zd) ** k) / k
+    # P2M
+    for gidx_x, gidx_y in product(range(4), range(4)):
+        gidx = (gidx_y, gidx_x)
+        if gidx in pdict:
+            for pidx,w in pdict[gidx]:
+                p = ps[pidx]
+                Q[gidx] += p.q
+                for k in range(1,1+P+1):
+                    zi = complex(p.x, p.y)
+                    zd = grid_center(gidx_x, gidx_y)
+                    M[(k-1, gidx_y, gidx_x)] += w * -p.q * ((zi - zd) ** k) / k
 
-    for tidx_y in range(4):
-        for tidx_x in range(4):
-            tidx = (tidx_x, tidx_y)
-            wpp = grid_center(tidx_x, tidx_y)
-            for sidx_y in range(4):
-                for sidx_x in range(4):
-                    sidx = (sidx_x, sidx_y)
-                    zpp = grid_center(sidx_x, sidx_y)
-                    if abs(tidx_y - sidx_y) > 1 or abs(tidx_x - sidx_x) > 1:
-                        c0 = sum(M[(k-1, sidx_y, sidx_x)] / ((zpp - wpp) ** k) * (-1) ** k for k in range(1, 1+P+1))
-                        L[0, tidx_y, tidx_x] += Q[(sidx_y, sidx_x)] * cmath.log(grid_center(tidx_x, tidx_y) - grid_center(sidx_x, sidx_y)) + c0
-                        for t in range(1,1+P):
-                            L[(t, tidx_y, tidx_x)] += -Q[(sidx_y, sidx_x)] / (t * ((zpp - wpp) ** t)) + 1 / ((zpp - wpp) ** t) * sum(M[(l-1, sidx_y, sidx_x)] / ((zpp - wpp) ** l) * comb(t + l - 1, l - 1) * (-1) ** l for l in range(1, P+1))
+    # M2L
+    for tidx_x, tidx_y in product(range(4), range(4)):
+        tidx = (tidx_x, tidx_y)
+        wpp = grid_center(tidx_x, tidx_y)
+        for sidx_x, sidx_y in product(range(4), range(4)):
+            sidx = (sidx_x, sidx_y)
+            zpp = grid_center(sidx_x, sidx_y)
+            if abs(tidx_y - sidx_y) > 1 or abs(tidx_x - sidx_x) > 1:
+                c0 = sum(M[(k-1, sidx_y, sidx_x)] / ((zpp - wpp) ** k) * (-1) ** k for k in range(1, 1+P+1))
+                L[0, tidx_y, tidx_x] += Q[(sidx_y, sidx_x)] * cmath.log(grid_center(tidx_x, tidx_y) - grid_center(sidx_x, sidx_y)) + c0
+                for t in range(1,1+P):
+                    L[t, tidx_y, tidx_x] += -Q[(sidx_y, sidx_x)] / (t * ((zpp - wpp) ** t)) + 1 / ((zpp - wpp) ** t) * sum(M[(l-1, sidx_y, sidx_x)] / ((zpp - wpp) ** l) * comb(t + l - 1, l - 1) * (-1) ** l for l in range(1, P+1))
 
+    # L2P
     for widx,v in pdict.items():
         wpp = grid_center(widx[1], widx[0])
-        for zidx in v:
+        for zidx,_ in v:
             z = complex(ps[zidx].x, ps[zidx].y)
             ps[zidx].phi_appx = -sum(((z - wpp) ** t) * L[(t, widx[0], widx[1])] for t in range(0, 1+P)).real
-       
 
-    '''for p in ps:
-        tgridx = p.get_grid_idx()
-        s = 0
-        for gidx_y in range(4):
-            for gidx_x in range(4):
-                sgridx = (gidx_y, gidx_x)
-                if abs(tgridx[0]-sgridx[0]) > 1 or abs(tgridx[1]-sgridx[1]) > 1:
-                    if sgridx in pdict:
-                        z = complex(p.x, p.y)
-                        zd = grid_center(gidx_x, gidx_y)
-                        s += Q[sgridx] * cmath.log(z - zd) + sum(M[k-1, sgridx[0], sgridx[1]] / ((z - zd) ** k) for k in range(1,1+P+1))
-        p.phi_appx = -s.real'''
-
-    #print(ps[0].x, ps[0].y, ps[0].phi_real, ps[0].phi_appx, ps[1].phi_real, ps[1].phi_appx, ps[0].get_grid_idx())
+    print(ps[0])
     phi_real.append(ps[0].phi_real)
     phi_appx.append(ps[0].phi_appx)
     ps[0].y += 0.0001
