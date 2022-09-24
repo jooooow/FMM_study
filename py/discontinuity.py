@@ -39,11 +39,13 @@ def get_dict_plain(ps):
             pdict[grid_idx] = [(i,1.0)]
     return pdict
 
-P = 2
-ps = [Particle(0.76,0.249,10), Particle(0.1,0.75,-10)]
+P = 1
+ps = [Particle(0.755,0.23,10), Particle(0.1,0.65,-10)]
 phi_real = []
 phi_appx = []
 r = range(20)
+check_idx = 1
+errs = []
 for _ in r:
     for p_t in ps:
         s = 0
@@ -93,10 +95,11 @@ for _ in r:
         p.phi_appx = -sum(((z - wpp) ** t) * L[(t, gidx[0], gidx[1])] for t in range(0, 1+P)).real
          
     
-    print(ps[0])
-    phi_real.append(ps[0].phi_real)
-    phi_appx.append(ps[0].phi_appx)
-    ps[0].y += 0.0001
+    print(ps[check_idx])
+    phi_real.append(ps[check_idx].phi_real)
+    phi_appx.append(ps[check_idx].phi_appx)
+    errs.append(abs(ps[check_idx].phi_real - ps[check_idx].phi_appx))
+    ps[0].y += 0.002
 
 figure, axes = plt.subplots()
 axes.plot(r, phi_real, label='real')  
@@ -104,5 +107,7 @@ axes.plot(r, phi_appx, label='appx')
 plt.ylabel('potential')
 axes.legend()
 #axes.set_ylim([-2.65, -2.55])
+
+print('err_avg = ', sum(errs) / len(errs))
 
 plt.show()
