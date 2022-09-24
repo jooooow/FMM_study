@@ -39,12 +39,12 @@ def get_dict_plain(ps):
             pdict[grid_idx] = [(i,1.0)]
     return pdict
 
-P = 1
+P = 2
 ps = [Particle(0.755,0.23,10), Particle(0.1,0.65,-10)]
 phi_real = []
 phi_appx = []
 r = range(20)
-check_idx = 1
+check_idx = 0
 errs = []
 for _ in r:
     for p_t in ps:

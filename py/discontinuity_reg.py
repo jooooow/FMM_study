@@ -96,12 +96,12 @@ def get_pdict_from_wdict(wdict):
                 pdict[cidx].append((k, w))
     return pdict
 
-P = 1
+P = 2
 ps = [Particle(0.755,0.23,10), Particle(0.1,0.65,-10)]
 phi_real = []
 phi_appx = []
 r = range(20)
-check_idx = 1
+check_idx = 0
 errs = []
 for _ in r:
     for p_t in ps:
