@@ -40,7 +40,7 @@ def get_dict_plain(ps):
     return pdict
 
 P = 2
-ps = [Particle(0.76,0.249,10), Particle(0.1,0.65,-10)]
+ps = [Particle(0.76,0.249,10), Particle(0.1,0.75,-10)]
 phi_real = []
 phi_appx = []
 r = range(20)
@@ -56,9 +56,9 @@ for _ in r:
 
     pdict = get_dict_plain(ps)
 
-    M = np.zeros([P+1,4,4], dtype=np.complex)
+    M = np.zeros([P+1,4,4], dtype=np.complex128)
     Q = np.zeros([4,4])
-    L = np.zeros([P+1,4,4], dtype=np.complex)
+    L = np.zeros([P+1,4,4], dtype=np.complex128)
 
     # P2M
     for gidx_x, gidx_y in product(range(4), range(4)):
@@ -86,12 +86,13 @@ for _ in r:
                     L[t, tidx_y, tidx_x] += -Q[(sidx_y, sidx_x)] / (t * ((zpp - wpp) ** t)) + 1 / ((zpp - wpp) ** t) * sum(M[(l-1, sidx_y, sidx_x)] / ((zpp - wpp) ** l) * comb(t + l - 1, l - 1) * (-1) ** l for l in range(1, P+1))
 
     # L2P
-    for widx,v in pdict.items():
-        wpp = grid_center(widx[1], widx[0])
-        for zidx,_ in v:
-            z = complex(ps[zidx].x, ps[zidx].y)
-            ps[zidx].phi_appx = -sum(((z - wpp) ** t) * L[(t, widx[0], widx[1])] for t in range(0, 1+P)).real
-
+    for p in ps:
+        gidx = p.get_grid_idx()
+        wpp = grid_center(gidx[1], gidx[0])
+        z = complex(p.x, p.y)
+        p.phi_appx = -sum(((z - wpp) ** t) * L[(t, gidx[0], gidx[1])] for t in range(0, 1+P)).real
+         
+    
     print(ps[0])
     phi_real.append(ps[0].phi_real)
     phi_appx.append(ps[0].phi_appx)
@@ -105,4 +106,3 @@ axes.legend()
 #axes.set_ylim([-2.65, -2.55])
 
 plt.show()
-
