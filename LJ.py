@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import random
+import io
 
 epsilon = 1
 sigma = 0.2
@@ -45,7 +46,7 @@ def warp(x):
     return r
 
 ms = []
-N = 25
+N = 12
 for x in np.linspace(-4.5, 4.5, N):
     for y in np.linspace(-4.5, 4.5, N):
         ms.append(molecule(complex(x, y)))
@@ -88,14 +89,16 @@ for i in range(0, 1000):
     ax.set(xlim=(-0.5 * size, 0.5 * size), ylim=(-0.5 * size, 0.5 * size))
     
     plt.pause(0.001)
-    fig = ax.figure
-    data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    anime.append(data)
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=200)
+    enc = np.frombuffer(buf.getvalue(), dtype=np.uint8) # bufferからの読み出し
+    dst = cv2.imdecode(enc, 1) # デコード
+    dst = dst[:,:,::-1] # BGR->RGB
+    anime.append(dst)
 
 size = anime[0].shape[0:2][::-1]
 fps = 30
-out = cv2.VideoWriter('LT2.avi', cv2.VideoWriter_fourcc('M','J','P','G'), fps, size, True)
+out = cv2.VideoWriter('LJ2.avi', cv2.VideoWriter_fourcc('M','J','P','G'), fps, size, True)
 
 cnt = 0
 for frame in anime:
@@ -105,4 +108,3 @@ for frame in anime:
     cnt = cnt + 1
 
 out.release()
-
