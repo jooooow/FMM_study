@@ -20,12 +20,18 @@ class Atom:
     def __init__(self, q, pos, v):
         self.q = q
         self.pos = pos
+        self.pre_pos = [pos, pos]
         self.potential = complex(0)
         self.potential2 = complex(0)
         self.force = complex(0)
         self.force2 = complex(0)
         self.acc = complex(0)
         self.v = v
+
+        self.pos_pre = pos
+        self.v_pre = v
+        self.acc_pre = complex(0)
+
         self.cell_idx = complex(0)
     def __repr__(self):
         return f'atom(q={self.q}, pos={self.pos}, v={self.v})'
@@ -66,7 +72,7 @@ def GetFrame():
     dst = dst[:,:,::-1]
     return dst
 
-M = 12
+M = 8
 offset = region_size / M / 2 + 0.3
 atoms = []
 for y in np.linspace(-region_size / 2 + offset, region_size / 2 - offset, M):
@@ -90,10 +96,11 @@ def get_cell_center(cell_idx):
 fig, ax = plt.subplots()
 anime = []
 dt = 0.005
-
-for i in range(100):
+duration = 50
+rms_p = []
+rms_f = []
+for i in range(duration):
     time = dt * i
-    print(f't = {time}')
     plt.cla()
 
     # update cell idx & clear potential/force
@@ -128,25 +135,27 @@ for i in range(100):
             if r_y > N / 2:
                 r_y = N - r_y'''
             r = complex(r_x, r_y)
+            # P2P
             if r.real <= 1 and r.imag <= 1:
                 for atom_tar_idx in atom_cell_dict[cell_idx_tar]:
                     ptemp1 = complex(0)
                     ftemp1 = complex(0)
                     for atom_src_idx in atom_cell_dict[cell_idx_src]:
                         if atom_tar_idx == atom_src_idx:
-                            continue;
+                            continue
                         r = atoms[atom_tar_idx].pos - atoms[atom_src_idx].pos
-                        #r = warp(r)
+                        r = warp(r)
                         ptemp1 += -atoms[atom_src_idx].q * cmath.log(r)
                         ftemp1 += atoms[atom_tar_idx].q * atoms[atom_src_idx].q * 1 / (r)
                     atoms[atom_tar_idx].potential2 += ptemp1.real
                     atoms[atom_tar_idx].force2 += ftemp1
+            # M2L
             else:
                 pos_tar = get_cell_center(cell_idx_tar)
                 pos_src = get_cell_center(cell_idx_src)
                 for t in range(0, P+1):
                     zdiv = pos_tar - pos_src
-                    #zdiv = warp(zdiv)
+                    zdiv = warp(zdiv)
                     if t == 0:
                         cell_dict[cell_idx_tar][1][0] += cell_dict[cell_idx_src][0][0] * cmath.log(zdiv) + sum(cell_dict[cell_idx_src][0][l] / zdiv ** l for l in range(1,P+1))
                     else:
@@ -170,7 +179,7 @@ for i in range(100):
         for a_src in atoms:
             if a_tar != a_src:
                 r = a_tar.pos - a_src.pos
-                #r = warp(r)
+                r = warp(r)
                 ptemp += -math.log(abs(r)) * a_src.q
                 phi = -a_src.q * cmath.log(r)
                 f = a_tar.q * a_src.q * 1 / (r)
@@ -180,7 +189,7 @@ for i in range(100):
         #a_tar.force = complex(force.real, -force.imag)
         #a_tar.potential = potential.real
         a_tar.force = ftemp
-        a_tar.potential = ptemp
+        a_tar.potential = ptemp#
 
     # update acc, v, pos
     p1 = []
@@ -188,16 +197,42 @@ for i in range(100):
     fs = []
     ps = []
     for a_tar in atoms:
-        a_tar.acc = a_tar.force2 / m
+        #1.normal 
+        '''a_tar.acc = a_tar.force2 / m
         a_tar.v += a_tar.acc * dt
-        a_tar.pos += a_tar.v * dt
-        #a_tar.pos = warp(a_tar.pos)
+        a_tar.pos += a_tar.v * dt'''
+        #2.verlet
+        '''a_tar.acc = a_tar.force2 / m
+        a_tar.pos = 2 * a_tar.pre_pos[0] - a_tar.pre_pos[1] + a_tar.acc * dt * dt
+        a_tar.pre_pos[1] = a_tar.pre_pos[0]
+        a_tar.pre_pos[0] = a_tar.pos'''
+        #3.velocity-verlet
+        a_tar.pos = a_tar.pos_pre + a_tar.v_pre * dt + 0.5 * a_tar.acc_pre * dt * dt
+        a_tar.pos = warp(a_tar.pos)
+        a_tar.acc = a_tar.force2 / m
+        a_tar.v = a_tar.v_pre + 0.5 * (a_tar.acc_pre + a_tar.acc) * dt
+        a_tar.pos_pre = a_tar.pos
+        a_tar.acc_pre = a_tar.acc
+        a_tar.v_pre = a_tar.v
+
+        #print(pre_pos)
+
         p1.append(a_tar.potential)
         p2.append(a_tar.potential2)
         fs.append(abs(a_tar.force - a_tar.force2) ** 2)
         ps.append(abs(a_tar.potential - a_tar.potential2) ** 2)
-    print("ps = ", math.sqrt(sum(ps) / len(ps)))
-    print("fs = ", math.sqrt(sum(fs) / len(fs)))
+
+    pss = math.sqrt(sum(ps) / len(ps))
+    fss = math.sqrt(sum(fs) / len(fs))
+    rms_p.append(pss)
+    rms_f.append(fss)
+
+    print('t = {:.3f}({:.2f}%), (ps,fs) = ({:.6f},{:.6f})'.format(
+        time,
+        i / duration * 100,
+        pss, 
+        fss)
+    )
     
     # visualization
     for atom in atoms:
@@ -205,13 +240,18 @@ for i in range(100):
         ax.set_title('t={:.3f}s'.format(time), loc='left')
         ax.set_aspect('equal')
         ax.set(xlim=(-0.5 * region_size, 0.5 * region_size), ylim=(-0.5 * region_size, 0.5 * region_size))
-    plt.pause(0.001)
+    #plt.pause(0.001)
     anime.append(GetFrame())
 
 size = anime[0].shape[0:2][::-1]
 fps = 30
-out = cv2.VideoWriter('md_FMM_2d_deep1.avi', cv2.VideoWriter_fourcc('M','J','P','G'), fps, size, True)
+out = cv2.VideoWriter('md_FMM_2d_deep1_velocity-verlet_warp.avi', cv2.VideoWriter_fourcc('M','J','P','G'), fps, size, True)
 for frame in anime:
     data = frame
     out.write(data)
 out.release()
+
+plt.figure()
+plt.plot(rms_p)
+plt.ylim([-0,1])
+plt.show()
